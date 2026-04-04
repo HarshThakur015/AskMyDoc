@@ -60,10 +60,14 @@ app.logger.propagate = False
 flask.cli.show_server_banner = lambda *args, **kwargs: None
 
 # Enable CORS with origins from .env or default to localhost
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-CORS(app, resources={r"/*": {
-    "origins": [frontend_url, "http://localhost:3000"]
-}}, supports_credentials=True, allow_headers=["Content-Type", "Authorization"], methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+origins_env = os.getenv("FRONTEND_URL", "http://localhost:3000")
+origins = [o.strip() for o in origins_env.split(",") if o.strip()]
+
+CORS(app, 
+     origins=origins, 
+     supports_credentials=True, 
+     methods=["GET", "POST", "DELETE", "PUT", "OPTIONS", "PATCH"],
+     allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Origin"])
 
 # Register authentication blueprint
 app.register_blueprint(auth, url_prefix='/auth')
@@ -141,8 +145,12 @@ def chat_run():
     
     try:
         user_id = request.user['id']
+        # Increase retrieval depth for summary/overview style questions
+        overview_keywords = ["summarize", "findings", "follow-up", "important details", "main issues", "what is this about"]
+        k_limit = 20 if any(k in question.lower() for k in overview_keywords) else top_k
+        
         # First get raw search results
-        search_result = search_documents(question, user_id, document_ids=document_ids, retrieve_top_k=top_k)
+        search_result = search_documents(question, user_id, document_ids=document_ids, retrieve_top_k=k_limit)
         
         results = search_result.get('results', [])
         
@@ -178,11 +186,28 @@ def chat_run():
             conn = get_db_connection()
             try:
                 cur = conn.cursor()
-                # 1. User Message
+                # 2. Add User Message to DB
                 cur.execute(
                     "INSERT INTO messages (user_id, session_id, role, content) VALUES (%s, %s, %s, %s)",
                     (user_id, session_id, "user", question)
                 )
+                
+                # 3. IF this is the FIRST message in a session, generate a meaningful title
+                cur.execute("SELECT COUNT(*) FROM messages WHERE session_id = %s", (session_id,))
+                msg_count = cur.fetchone()[0]
+                if msg_count == 1:
+                    try:
+                        from llm_handler import generate_response
+                        title_prompt = f"Summarize this query into a meaningful 3-5 word title for a chat session. Do not use quotes or punctuation. Query: {question}"
+                        title_res = generate_response(title_prompt, [], [])
+                        new_title = title_res["answer"].replace('"', '').strip()
+                        if len(new_title) > 50: new_title = new_title[:47] + "..."
+                        cur.execute("UPDATE sessions SET title = %s WHERE id = %s", (new_title, session_id))
+                    except Exception as te:
+                        print(f"Warning: Failed to generate chat title: {te}")
+                
+                conn.commit()
+
                 # 2. Assistant Message
                 cur.execute(
                     "INSERT INTO messages (user_id, session_id, role, content) VALUES (%s, %s, %s, %s)",
@@ -463,13 +488,18 @@ def delete_document(doc_id):
         if os.path.exists(file_path):
             os.remove(file_path)
         
-        # Delete from Pinecone
-        try:
-            from retrieval import get_pinecone_client, COLLECTION_NAME
-            index = get_pinecone_client().Index(COLLECTION_NAME)
-            index.delete(filter={"document_id": doc_id, "user_id": user_id})
-        except Exception as pe:
-            print(f"Warning: Failed to delete vectors from Pinecone: {pe}")
+        # Delete from Pinecone (in background to avoid UI lag)
+        def _purge_vectors(d_id, u_id):
+            try:
+                from retrieval import get_pinecone_client, COLLECTION_NAME
+                index = get_pinecone_client().Index(COLLECTION_NAME)
+                index.delete(filter={"document_id": d_id, "user_id": u_id})
+                print(f"Background: Successfully purged vectors for Doc {d_id}")
+            except Exception as pe:
+                print(f"Warning: Background vector purge failed: {pe}")
+
+        import threading
+        threading.Thread(target=_purge_vectors, args=(doc_id, user_id), daemon=True).start()
 
         return jsonify({"message": "Document deleted"}), 200
     except Exception as e:
@@ -516,9 +546,30 @@ def serve_document_file(doc_id):
             
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    finally:
-        release_db_connection(conn)
 
+@app.route('/api/v1/sessions/<int:session_id>', methods=['DELETE'])
+@token_required
+def delete_session(session_id):
+    """Deletes a chat session and all its messages."""
+    user_id = request.user['id']
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Verify ownership
+        cur.execute("SELECT id FROM sessions WHERE id = %s AND user_id = %s", (session_id, user_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            return jsonify({"error": "Session not found or unauthorized"}), 404
+            
+        cur.execute("DELETE FROM sessions WHERE id = %s AND user_id = %s", (session_id, user_id))
+        conn.commit()
+        cur.close()
+        release_db_connection(conn)
+        return jsonify({"message": "Session deleted"}), 200
+    except Exception as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 # Start server logic
 if __name__ == "__main__":

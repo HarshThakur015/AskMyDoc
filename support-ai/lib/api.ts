@@ -55,3 +55,6 @@ export const getSessions = () => API.get("/api/v1/sessions");
 
 export const getSessionDocuments = (sessionId: string | number) =>
   API.get(`/api/v1/sessions/${sessionId}/documents`);
+
+export const deleteSession = (sessionId: string | number) =>
+  API.delete(`/api/v1/sessions/${sessionId}`);

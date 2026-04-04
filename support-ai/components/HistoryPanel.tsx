@@ -1,22 +1,43 @@
 "use client";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "@/lib/store";
-import { getSessions, getChatHistory, getSessionDocuments } from "@/lib/api";
-import { LogOut, Plus, MessageSquare, FileSearch2 } from "lucide-react";
+import { getSessions, getChatHistory, getSessionDocuments, deleteSession } from "@/lib/api";
+import { LogOut, Plus, MessageSquare, FileSearch2, Trash2, LayoutDashboard, BrainCircuit, Sparkles, ChevronRight, BookOpen } from "lucide-react";
+import ConfirmModal from "./ConfirmModal";
 
 export default function HistoryPanel() {
   const {
     user, sessions, currentSessionId,
     setSessions, setCurrentSessionId, setActiveDocIds, setMessages, logout,
   } = useStore();
+  const [deletingSession, setDeletingSession] = useState<{ id: string | number, title: string } | null>(null);
+
+  const fetchSessions = async () => {
+    try {
+      const res = await getSessions();
+      setSessions(res.data || []);
+    } catch {}
+  };
 
   useEffect(() => {
-    // Sessions already in store from localStorage — show immediately.
-    // Silently refresh in background to pick up any new sessions.
-    getSessions()
-      .then((res) => setSessions(res.data || []))
-      .catch(() => {});
+    fetchSessions();
   }, []);
+
+  const confirmDeleteSession = async () => {
+    if (!deletingSession) return;
+    try {
+      await deleteSession(deletingSession.id);
+      if (String(currentSessionId) === String(deletingSession.id)) {
+        setCurrentSessionId(null);
+        setMessages([]);
+        setActiveDocIds([]);
+      }
+      await fetchSessions();
+    } catch (e) {
+      console.error("Failed to delete session", e);
+    }
+  };
 
   const startNewChat = () => {
     setCurrentSessionId(null);
@@ -25,11 +46,7 @@ export default function HistoryPanel() {
   };
 
   const switchSession = async (id: string | number) => {
-    // Set session ID — ChatWindow's useEffect will handle showing messages
-    // (cache-first, then background DB refresh). Never blank the screen here.
     setCurrentSessionId(id);
-
-    // Still need to update active doc IDs from DB
     try {
       const docsRes = await getSessionDocuments(id);
       const docIds = (docsRes.data || []).map((d: any) => String(d.id));
@@ -39,130 +56,155 @@ export default function HistoryPanel() {
     }
   };
 
-  // Group sessions by date
+  // Grouping logic
   const today = new Date();
-  const todaySessions = sessions.filter((s) => {
-    const d = new Date(s.created_at);
-    return d.toDateString() === today.toDateString();
-  });
-  const olderSessions = sessions.filter((s) => {
-    const d = new Date(s.created_at);
-    return d.toDateString() !== today.toDateString();
-  });
+  const todaySessions = sessions.filter((s) => new Date(s.created_at).toDateString() === today.toDateString());
+  const olderSessions = sessions.filter((s) => new Date(s.created_at).toDateString() !== today.toDateString());
 
   return (
     <aside style={{
-      width: 260, minWidth: 260, height: "100vh",
+      width: 280, minWidth: 280, height: "100vh",
       background: "var(--surface)",
       borderRight: "1px solid var(--border)",
       display: "flex", flexDirection: "column",
       zIndex: 10,
     }}>
-      {/* Brand */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 18px 16px" }}>
-        <div style={{
-          width: 34, height: 34, borderRadius: 10,
-          background: "var(--accent)",
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          boxShadow: "var(--shadow)"
-        }}>
-          <FileSearch2 size={16} color="#fff" strokeWidth={1.8} />
-        </div>
-        <div>
-          <div style={{ fontFamily: "'Playfair Display', serif", fontWeight: 600, fontSize: 15.5, color: "var(--text)", letterSpacing: "-0.02em" }}>AskMyDoc</div>
-          <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Document Intelligence</div>
+      {/* Brand Header */}
+      <div style={{ padding: "24px 22px 20px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 12,
+            background: "linear-gradient(135deg, var(--accent) 0%, #4338ca 100%)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 8px 16px -4px rgba(99,102,241,0.3)"
+          }}>
+            <BookOpen size={20} color="#fff" strokeWidth={1.8} />
+          </div>
+          <div>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontWeight: 700, fontSize: 17, color: "var(--text)", letterSpacing: "-0.01em" }}>AskMyDoc</div>
+            <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, opacity: 0.8 }}>Neural Archive</div>
+          </div>
         </div>
       </div>
 
-      {/* New Chat */}
-      <div style={{ padding: "0 14px 16px" }}>
+      {/* New Session Action */}
+      <div style={{ padding: "0 18px 20px" }}>
         <button onClick={startNewChat} style={{
-          width: "100%", padding: "10px 0", borderRadius: 10, border: "none",
-          background: "var(--accent)",
-          color: "#fff", fontSize: 13.5, fontWeight: 500, cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          boxShadow: "var(--shadow)",
-          transition: "all 0.2s",
-        }}>
-          <Plus size={15} strokeWidth={2.5} /> New Chat
+          width: "100%", padding: "12px 0", borderRadius: 14, border: "none",
+          background: "var(--accent)", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+          boxShadow: "0 4px 12px rgba(99,102,241,0.2)",
+          transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+        }} className="hover-lift">
+          <Plus size={16} strokeWidth={2.5} /> Initialize Workspace
         </button>
       </div>
 
-      {/* Session List */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 0 8px" }}>
-        {todaySessions.length > 0 && (
-          <>
-            <div style={{ padding: "8px 18px 6px", fontSize: 10, color: "var(--text-3)", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>Today</div>
-            {todaySessions.map((s) => (
-              <div key={s.id} onClick={() => switchSession(s.id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "9px 18px", cursor: "pointer",
-                  background: currentSessionId === s.id ? "var(--bg-2)" : "transparent",
-                  borderLeft: currentSessionId === s.id ? "3px solid var(--accent)" : "3px solid transparent",
-                  transition: "all 0.15s",
-                }}>
-                <MessageSquare size={13} strokeWidth={1.5} style={{ color: currentSessionId === s.id ? "var(--accent)" : "var(--text-3)", flexShrink: 0 }} />
-                <span style={{
-                  fontSize: 13, color: currentSessionId === s.id ? "var(--text)" : "var(--text-2)",
-                  fontWeight: currentSessionId === s.id ? 500 : 400,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>{s.title}</span>
-              </div>
-            ))}
-          </>
-        )}
+      {/* Scrollable List */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 12px 8px" }}>
+        <AnimatePresence mode="popLayout">
+          {todaySessions.length > 0 && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <div style={{ padding: "10px 14px 8px", fontSize: 10.5, color: "var(--text-3)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.6 }}>Recent Activity</div>
+              {todaySessions.map((s) => (
+                <SessionItem key={s.id} session={s} isActive={String(currentSessionId) === String(s.id)} onClick={() => switchSession(s.id)} onDelete={() => setDeletingSession({ id: s.id, title: s.title })} />
+              ))}
+            </motion.div>
+          )}
 
-        {olderSessions.length > 0 && (
-          <>
-            <div style={{ padding: "12px 18px 6px", fontSize: 10, color: "var(--text-3)", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>Previous</div>
-            {olderSessions.map((s) => (
-              <div key={s.id} onClick={() => switchSession(s.id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "9px 18px", cursor: "pointer",
-                  background: currentSessionId === s.id ? "var(--bg-2)" : "transparent",
-                  borderLeft: currentSessionId === s.id ? "3px solid var(--accent)" : "3px solid transparent",
-                  transition: "all 0.15s",
-                }}>
-                <MessageSquare size={13} strokeWidth={1.5} style={{ color: currentSessionId === s.id ? "var(--accent)" : "var(--text-3)", flexShrink: 0 }} />
-                <span style={{
-                  fontSize: 13, color: currentSessionId === s.id ? "var(--text)" : "var(--text-2)",
-                  fontWeight: currentSessionId === s.id ? 500 : 400,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>{s.title}</span>
-              </div>
-            ))}
-          </>
-        )}
+          {olderSessions.length > 0 && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ marginTop: 16 }}>
+              <div style={{ padding: "10px 14px 8px", fontSize: 10.5, color: "var(--text-3)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.6 }}>Historical Traces</div>
+              {olderSessions.map((s) => (
+                <SessionItem key={s.id} session={s} isActive={String(currentSessionId) === String(s.id)} onClick={() => switchSession(s.id)} onDelete={() => setDeletingSession({ id: s.id, title: s.title })} />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {sessions.length === 0 && (
-          <div style={{ padding: "32px 18px", textAlign: "center" }}>
-            <MessageSquare size={28} strokeWidth={1} style={{ color: "var(--border)", margin: "0 auto 10px", display: "block" }} />
-            <div style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.6 }}>
-              No conversations yet.<br />
-              <span style={{ fontStyle: "italic", fontSize: 11.5 }}>Click "New Chat" to begin.</span>
+          <div style={{ padding: "60px 20px", textAlign: "center" }}>
+            <Sparkles size={32} strokeWidth={1} style={{ color: "var(--border)", margin: "0 auto 14px", display: "block", opacity: 0.4 }} />
+            <div style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.6 }}>
+              No neural exchanges found.<br />
+              <span style={{ fontStyle: "italic", opacity: 0.7 }}>Launch a workspace to begin.</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Footer */}
-      <div style={{ padding: "14px 18px", borderTop: "1px solid var(--border)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      {/* Identity Footer */}
+      <div style={{ padding: "20px", borderTop: "1px solid var(--border)", background: "rgba(0,0,0,0.01)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ 
+            width: 32, height: 32, borderRadius: "50%", 
+            background: "var(--bg-3)", border: "1.5px solid var(--border)",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+          }}>
+            <LayoutDashboard size={14} color="var(--text-2)" />
+          </div>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500 }}>{user?.email}</div>
-            <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 1 }}>Authenticated</div>
+            <div style={{ fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{user?.email}</div>
+            <div style={{ fontSize: 10.5, color: "var(--text-3)", display: "flex", alignItems: "center", gap: 4 }}>
+              <div style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--success)" }} /> Linked Operator
+            </div>
           </div>
           <button onClick={logout} style={{
-            background: "none", border: "1px solid var(--border)", borderRadius: 7,
-            padding: "5px 7px", cursor: "pointer", color: "var(--text-3)",
-            transition: "all 0.15s", lineHeight: 0,
-          }}>
-            <LogOut size={13} />
+            background: "none", border: "1px solid var(--border)", borderRadius: 10,
+            padding: "6px", cursor: "pointer", color: "var(--text-3)",
+            transition: "all 0.2s", display: "flex"
+          }} className="hover-bg">
+            <LogOut size={14} />
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={!!deletingSession}
+        onClose={() => setDeletingSession(null)}
+        onConfirm={confirmDeleteSession}
+        title="Are you sure you want to delete this chat?"
+        message={`"${deletingSession?.title}"`}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </aside>
+  );
+}
+
+function SessionItem({ session, isActive, onClick, onDelete }: any) {
+  return (
+    <motion.div 
+      onClick={onClick}
+      whileHover={{ x: 4 }}
+      style={{
+        display: "flex", alignItems: "center", gap: 12,
+        padding: "11px 14px", borderRadius: 12, cursor: "pointer",
+        background: isActive ? "rgba(99,102,241,0.06)" : "transparent",
+        border: isActive ? "1px solid rgba(99,102,241,0.12)" : "1px solid transparent",
+        marginBottom: 2, transition: "all 0.2s",
+        position: "relative"
+      }}
+      className={!isActive ? "hover-bg" : ""}
+    >
+      <div style={{
+        width: 8, height: 8, borderRadius: "50%", 
+        background: isActive ? "var(--accent)" : "transparent", 
+        border: isActive ? "none" : "1.5px solid var(--border)",
+        flexShrink: 0
+      }} />
+      <span style={{
+        flex: 1, fontSize: 13.5, color: isActive ? "var(--text)" : "var(--text-2)",
+        fontWeight: isActive ? 600 : 450,
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+      }}>{session.title}</span>
+      
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} 
+          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 4, display: "flex", opacity: isActive ? 1 : 0.4 }}>
+          <Trash2 size={13} />
+        </button>
+      </div>
+    </motion.div>
   );
 }

@@ -1,195 +1,201 @@
 "use client";
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { login, register } from "@/lib/api";
 import { useStore } from "@/lib/store";
-import { Loader2, ArrowRight, Mail, Lock, BookOpen } from "lucide-react";
+import { login, register } from "@/lib/api";
+import { BrainCircuit, Mail, Lock, ArrowRight, ShieldCheck, Sparkles, Fingerprint, Loader2, BookOpen } from "lucide-react";
+import ThreeBackground from "./ThreeBackground";
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const setUser = useStore((s) => s.setUser);
 
-  const handleSubmit = async () => {
-    if (!email || !password) { setError("Please fill in both fields."); return; }
-    setError(""); setLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setError("Credentials required to initialize neural link.");
+      return;
+    }
+    setLoading(true);
+    setError("");
     try {
-      const fn = mode === "login" ? login : register;
-      const res = await fn(email, password);
+      const res = isLogin ? await login(email, password) : await register(email, password);
       const token = res.data.token || res.data.access_token;
+      // In a real app we might use cookies, but we follow the store pattern here
       localStorage.setItem("token", token);
       localStorage.setItem("email", email);
       setUser({ email, token });
-    } catch (e: any) {
-      setError(e?.response?.data?.message || "Authentication failed. Please check your credentials.");
-    } finally { setLoading(false); }
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.response?.data?.message || "Neural authentication failed. Access denied.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="relative z-10 flex items-center justify-center min-h-screen px-6">
-      <div style={{ display: "flex", gap: 56, alignItems: "center", maxWidth: 860, width: "100%" }}>
+    <div style={{ 
+      display: "flex", width: "100vw", height: "100vh", background: "#050505", 
+      color: "var(--text)", overflow: "hidden", position: "relative" 
+    }}>
+      <ThreeBackground />
 
-        {/* Left — editorial brand panel */}
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.65, ease: "easeOut" }}
-          className="hidden lg:flex"
-          style={{ flexDirection: "column", gap: 32, flex: 1 }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, background: "var(--accent)",
-              borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <BookOpen size={18} color="#fff" strokeWidth={1.5} />
-            </div>
-            <div>
-              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 500, color: "var(--text)", letterSpacing: "-0.01em" }}>
-                Support AI
-              </div>
-              <div style={{ fontSize: 11.5, color: "var(--text-3)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                Policy Intelligence
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h1 style={{
-              fontFamily: "'Playfair Display', serif",
-              fontSize: 38, fontWeight: 400,
-              lineHeight: 1.2, color: "var(--text)",
-              letterSpacing: "-0.02em", marginBottom: 16,
-            }}>
-              Your documents,<br />
-              <em style={{ fontStyle: "italic", color: "var(--text-2)" }}>answered precisely.</em>
-            </h1>
-            <p style={{ color: "var(--text-2)", fontSize: 15, lineHeight: 1.75, maxWidth: 340 }}>
-              Ask questions in plain language. Get grounded answers from your policy documents — no fabrication, no drift.
-            </p>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {[
-              { n: "01", label: "Two-stage semantic retrieval" },
-              { n: "02", label: "Cross-encoder re-ranking" },
-              { n: "03", label: "Conversational memory" },
-              { n: "04", label: "Strict grounding — never hallucinates" },
-            ].map((f) => (
-              <div key={f.n} style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <span style={{
-                  fontFamily: "'Playfair Display', serif",
-                  fontSize: 11, color: "var(--text-3)",
-                  minWidth: 20, fontStyle: "italic",
-                }}>
-                  {f.n}
-                </span>
-                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-                <span style={{ fontSize: 13, color: "var(--text-2)" }}>{f.label}</span>
-              </div>
-            ))}
-          </div>
-
-          <p style={{ fontSize: 11.5, color: "var(--text-3)", letterSpacing: "0.03em" }}>
-            Gemini 1.5 Flash · Pinecone · BAAI/bge-base-en-v1.5
-          </p>
-        </motion.div>
-
-        {/* Right — auth form */}
-        <motion.div
-          initial={{ opacity: 0, y: 28 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, ease: "easeOut", delay: 0.08 }}
-          className="card"
-          style={{ width: 380, padding: "36px 32px", flexShrink: 0 }}
-        >
-          {/* Mobile logo */}
-          <div className="lg:hidden" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
-            <BookOpen size={18} style={{ color: "var(--accent)" }} strokeWidth={1.5} />
-            <span style={{ fontFamily: "'Playfair Display', serif", fontWeight: 500, fontSize: 16, color: "var(--text)" }}>Support AI</span>
-          </div>
-
-          <div style={{ marginBottom: 24 }}>
-            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.01em", marginBottom: 4 }}>
-              {mode === "login" ? "Welcome back" : "Create account"}
-            </h2>
-            <p style={{ fontSize: 13, color: "var(--text-3)", fontStyle: "italic" }}>
-              {mode === "login" ? "Sign in to your workspace" : "Start analysing your documents"}
-            </p>
-          </div>
-
-          {/* Tab row */}
-          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border)", marginBottom: 24 }}>
-            {(["login", "register"] as const).map((m) => (
-              <button key={m} onClick={() => { setMode(m); setError(""); }} style={{
-                flex: 1, padding: "8px 0", background: "none", border: "none",
-                borderBottom: `2px solid ${mode === m ? "var(--accent)" : "transparent"}`,
-                fontFamily: "'Source Serif 4', serif", fontSize: 13.5,
-                color: mode === m ? "var(--accent)" : "var(--text-3)",
-                cursor: "pointer", transition: "all 0.18s", marginBottom: -1,
-                fontWeight: mode === m ? 500 : 400,
+      {/* Brand Panel - Left */}
+      <div style={{ 
+        flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 80px",
+        position: "relative", zIndex: 5, background: "linear-gradient(to right, rgba(0,0,0,0.4), transparent)"
+      }}>
+        <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 40 }}>
+            <div style={{ position: "relative" }}>
+               <div style={{
+                width: 52, height: 52, borderRadius: 16,
+                background: "linear-gradient(135deg, var(--accent), #4338ca)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 0 30px rgba(99,102,241,0.4)",
               }}>
-                {m === "login" ? "Sign In" : "Register"}
-              </button>
-            ))}
+                <BookOpen size={28} color="#fff" strokeWidth={1.8} />
+              </div>
+              <motion.div 
+                animate={{ top: ["-10%", "110%", "-10%"] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                style={{
+                  position: "absolute", left: -10, right: -10, height: 2,
+                  background: "linear-gradient(to right, transparent, var(--accent), transparent)",
+                  boxShadow: "0 0 15px var(--accent)", zIndex: 2
+                }}
+              />
+            </div>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 700, letterSpacing: "-0.01em" }}>
+              AskMyDoc <span style={{ color: "var(--accent)", opacity: 0.8 }}>AI</span>
+            </div>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label style={{ fontSize: 11.5, color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "'Source Serif 4', serif" }}>
-                Email address
-              </label>
-              <div style={{ position: "relative" }}>
-                <Mail size={13} strokeWidth={1.5} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} />
-                <input className="input" style={{ paddingLeft: 34 }} type="email"
-                  placeholder="you@company.com" value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
+          <h1 style={{ 
+            fontFamily: "'Playfair Display', serif", fontSize: "4.5rem", fontWeight: 400, 
+            lineHeight: 1.1, marginBottom: 24, letterSpacing: "-0.04em" 
+          }}>
+            Unlock your <br />
+            <span style={{ fontStyle: "italic", fontWeight: 300, color: "var(--accent)" }}>Collective Intelligence.</span>
+          </h1>
+          
+          <p style={{ 
+            color: "var(--text-3)", fontSize: 18, maxWidth: 460, lineHeight: 1.7, 
+            fontFamily: "'Source Serif 4', serif", opacity: 0.7 
+          }}>
+            Grounded analysis for the modern researcher. Bridge the gap between static archives and dynamic neural insights.
+          </p>
+
+          <div style={{ display: "flex", gap: 32, marginTop: 60 }}>
+            {[
+              { icon: <ShieldCheck size={20} />, label: "Encrypted Node" },
+              { icon: <Sparkles size={20} />, label: "Contextual Synthesis" },
+              { icon: <Fingerprint size={20} />, label: "Biometric Validated" }
+            ].map((item, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-3)", fontSize: 13, fontWeight: 500 }}>
+                <div style={{ color: "var(--accent)" }}>{item.icon}</div>
+                {item.label}
               </div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Auth Card - Right */}
+      <div style={{ 
+        width: "50%", display: "flex", alignItems: "center", justifyContent: "center", 
+        padding: 40, position: "relative", zIndex: 10 
+      }}>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+          style={{ 
+            width: "100%", maxWidth: 420, padding: 48, borderRadius: 32,
+            background: "rgba(255, 255, 255, 0.03)", backdropFilter: "blur(40px)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            boxShadow: "0 40px 100px rgba(0,0,0,0.5)",
+          }}
+        >
+          <div style={{ textAlign: "center", marginBottom: 40 }}>
+            <h2 style={{ fontSize: 28, fontWeight: 600, marginBottom: 12, letterSpacing: "-0.02em" }}>
+              {isLogin ? "Welcome Back" : "Initialize Account"}
+            </h2>
+            <p style={{ color: "var(--text-3)", fontSize: 14 }}>
+              {isLogin ? "Reconnect to your neural archives" : "Join the global intelligence network"}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ position: "relative" }}>
+              <Mail style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} size={18} />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="Neural Identity (Email)"
+                style={{ 
+                  width: "100%", padding: "16px 16px 16px 48px", borderRadius: 14,
+                  background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)",
+                  color: "var(--text)", fontSize: 14, outline: "none", transition: "all 0.2s"
+                }} className="auth-input" />
             </div>
 
-            <div>
-              <label style={{ fontSize: 11.5, color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "'Source Serif 4', serif" }}>
-                Password
-              </label>
-              <div style={{ position: "relative" }}>
-                <Lock size={13} strokeWidth={1.5} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} />
-                <input className="input" style={{ paddingLeft: 34 }} type="password"
-                  placeholder="••••••••" value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
-              </div>
+            <div style={{ position: "relative" }}>
+              <Lock style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} size={18} />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Authentication Key"
+                style={{ 
+                  width: "100%", padding: "16px 16px 16px 48px", borderRadius: 14,
+                  background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)",
+                  color: "var(--text)", fontSize: 14, outline: "none", transition: "all 0.2s"
+                }} className="auth-input" />
             </div>
 
             <AnimatePresence>
               {error && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                  style={{ background: "rgba(138,48,48,0.06)", border: "1px solid rgba(138,48,48,0.18)", borderRadius: "var(--radius)", padding: "9px 13px", color: "var(--danger)", fontSize: 13, fontStyle: "italic" }}
-                >
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                  style={{ color: "var(--danger)", fontSize: 13, textAlign: "center", padding: "12px", background: "rgba(220,38,38,0.05)", borderRadius: 10, border: "1px solid rgba(220,38,38,0.1)" }}>
                   {error}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <button className="btn-primary" onClick={handleSubmit} disabled={loading}
-              style={{ width: "100%", justifyContent: "center", marginTop: 2 }}>
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <>{mode === "login" ? "Sign In" : "Create Account"} <ArrowRight size={14} strokeWidth={1.5} /></>}
+            <button type="submit" disabled={loading} style={{
+              marginTop: 10, padding: "16px", borderRadius: 14, border: "none",
+              background: "var(--accent)", color: "#fff", fontWeight: 600, 
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+              boxShadow: "0 10px 25px rgba(99,102,241,0.3)", transition: "all 0.3s"
+            }} className="hover-lift">
+              {loading ? <Loader2 size={18} className="animate-spin" /> : (isLogin ? "Initialize Session" : "Create Profile")}
+              {!loading && <ArrowRight size={18} />}
+            </button>
+          </form>
+
+          <div style={{ marginTop: 32, textAlign: "center", fontSize: 14 }}>
+            <span style={{ color: "var(--text-3)" }}>
+              {isLogin ? "New operator?" : "Already registered?"}
+            </span>
+            <button onClick={() => { setIsLogin(!isLogin); setError(""); }} style={{
+              background: "none", border: "none", color: "var(--accent)",
+              fontWeight: 600, cursor: "pointer", marginLeft: 8, textDecoration: "underline"
+            }}>
+              {isLogin ? "Activate Terminal" : "Access Archive"}
             </button>
           </div>
-
-          <p style={{ textAlign: "center", color: "var(--text-3)", fontSize: 12.5, marginTop: 20, fontStyle: "italic" }}>
-            {mode === "login" ? "No account? " : "Already registered? "}
-            <button onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}
-              style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontSize: 12.5, fontFamily: "'Source Serif 4', serif", fontStyle: "italic" }}>
-              {mode === "login" ? "Create one" : "Sign in"}
-            </button>
-          </p>
         </motion.div>
       </div>
+
+      <style>{`
+        .auth-input:focus {
+          border-color: var(--accent) !important;
+          background: rgba(99,102,241,0.03) !important;
+          box-shadow: 0 0 0 1px var(--accent);
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+      `}</style>
     </div>
   );
 }

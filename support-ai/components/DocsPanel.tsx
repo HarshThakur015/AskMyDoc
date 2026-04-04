@@ -1,8 +1,33 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { getDocuments, uploadDocument, deleteDocument } from "@/lib/api";
 import { FileText, Upload, Trash2, RefreshCw, Eye, CheckCircle2, AlertCircle, Clock, FolderOpen } from "lucide-react";
+import ConfirmModal from "./ConfirmModal";
+
+/**
+ * Modern, slim progress bar for background processing
+ */
+function ProcessingBar() {
+  return (
+    <div style={{ width: "100%", height: 3, background: "rgba(0,0,0,0.04)", borderRadius: 2, overflow: "hidden", marginTop: 6 }}>
+      <div 
+        className="pulse-bg" 
+        style={{ 
+          width: "40%", height: "100%", 
+          background: "linear-gradient(90deg, transparent, var(--accent), transparent)",
+          animation: "shimmer-move 1.5s infinite linear"
+        }} 
+      />
+      <style>{`
+        @keyframes shimmer-move {
+          0% { transform: translateX(-150%); }
+          100% { transform: translateX(250%); }
+        }
+      `}</style>
+    </div>
+  );
+}
 
 export default function DocsPanel() {
   const {
@@ -12,11 +37,11 @@ export default function DocsPanel() {
   const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [deletingDoc, setDeletingDoc] = useState<{ id: string | number, name: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchDocs = async (silent = false) => {
-    // silent=true means don't show a loading state, just update in background
     if (!silent) setUploading(false);
     try {
       const res = await getDocuments();
@@ -25,12 +50,10 @@ export default function DocsPanel() {
   };
 
   useEffect(() => {
-    // Documents already in store from localStorage — show immediately.
-    // Fire a background refresh to pick up any changes since last visit.
     fetchDocs(true);
     pollRef.current = setInterval(() => {
       const docs = useStore.getState().documents;
-      if (docs.some((d) => d.status === "processing")) fetchDocs(true);
+      if (docs.some((d: any) => d.status === "processing")) fetchDocs(true);
     }, 5000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
@@ -50,19 +73,15 @@ export default function DocsPanel() {
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleUpload(file);
-  };
-
-  const handleDelete = async (id: string, ev: React.MouseEvent) => {
-    ev.stopPropagation();
+  const confirmDelete = async () => {
+    if (!deletingDoc) return;
     try {
-      await deleteDocument(id);
+      await deleteDocument(deletingDoc.id);
       await fetchDocs();
-    } catch {}
+    } catch (e) {
+      console.error("Delete failed", e);
+    }
+    setDeletingDoc(null);
   };
 
   const statusBadge = (s: string) => {
@@ -71,39 +90,46 @@ export default function DocsPanel() {
     return <Clock size={11} strokeWidth={2} className="pulse-dot" style={{ color: "var(--warning)" }} />;
   };
 
-  const selectedCount = documents.filter((d) => activeDocIds?.includes(d.id)).length;
+  const selectedCount = documents.filter((d) => activeDocIds?.includes(String(d.id))).length;
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleUpload(file);
+  };
 
   return (
     <aside style={{
-      width: 280, minWidth: 280, height: "100vh",
+      width: 290, minWidth: 290, height: "100vh",
       background: "var(--surface)",
       borderLeft: "1px solid var(--border)",
       display: "flex", flexDirection: "column",
       zIndex: 10,
     }}>
-      {/* Header */}
-      <div style={{ padding: "20px 18px 14px", borderBottom: "1px solid var(--border)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <FolderOpen size={15} strokeWidth={1.5} style={{ color: "var(--accent)" }} />
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em" }}>Documents</span>
+      {/* Brand & Header */}
+      <div style={{ padding: "20px 20px 14px", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <FolderOpen size={16} strokeWidth={2} style={{ color: "var(--accent)" }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em" }}>Library</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {selectedCount > 0 && (
               <span style={{
-                fontSize: 10.5, fontWeight: 600, color: "#fff",
-                background: "var(--accent)", borderRadius: 10,
-                padding: "2px 8px", lineHeight: "16px",
-              }}>{selectedCount} selected</span>
+                fontSize: 10, fontWeight: 700, color: "#fff",
+                background: "var(--accent)", borderRadius: 12,
+                padding: "2px 8px", textTransform: "uppercase", letterSpacing: "0.02em"
+              }}>{selectedCount} Selected</span>
             )}
             <button onClick={() => { setRefreshing(true); fetchDocs().finally(() => setRefreshing(false)); }}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 2, lineHeight: 0 }}>
-              <RefreshCw size={12} strokeWidth={1.5} className={refreshing ? "animate-spin" : ""} />
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 2, display: "flex" }}>
+              <RefreshCw size={13} strokeWidth={2} className={refreshing ? "animate-spin" : ""} />
             </button>
           </div>
         </div>
 
-        {/* Upload area */}
+        {/* Upload Dropzone */}
         <input ref={fileRef} type="file" accept=".pdf,.docx,.txt" style={{ display: "none" }} onChange={onFileChange} />
         <div
           onClick={() => fileRef.current?.click()}
@@ -111,105 +137,129 @@ export default function DocsPanel() {
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
           style={{
-            padding: "14px 16px", borderRadius: 10, cursor: "pointer",
+            padding: "18px", borderRadius: 14, cursor: "pointer",
             border: dragOver ? "2px solid var(--accent)" : "2px dashed var(--border)",
-            background: dragOver ? "rgba(99,102,241,0.05)" : "var(--bg)",
-            display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-            transition: "all 0.2s",
+            background: dragOver ? "rgba(99,102,241,0.04)" : "rgba(0,0,0,0.015)",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
+          className="hover-lift"
         >
-          {uploading ? (
-            <RefreshCw size={16} className="animate-spin" style={{ color: "var(--accent)" }} />
-          ) : (
-            <Upload size={16} style={{ color: dragOver ? "var(--accent)" : "var(--text-3)" }} />
-          )}
-          <span style={{ fontSize: 12, color: dragOver ? "var(--accent)" : "var(--text-3)", textAlign: "center" }}>
-            {uploading ? "Uploading..." : "Drop file here or click to upload"}
-          </span>
-          <span style={{ fontSize: 10, color: "var(--text-3)", opacity: 0.6 }}>PDF, DOCX, TXT</span>
+          <div style={{
+            width: 38, height: 38, borderRadius: 10, background: "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 4px 10px rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.03)"
+          }}>
+            {uploading ? (
+              <RefreshCw size={18} className="animate-spin" style={{ color: "var(--accent)" }} />
+            ) : (
+              <Upload size={18} strokeWidth={2} style={{ color: dragOver ? "var(--accent)" : "var(--text-3)" }} />
+            )}
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", display: "block" }}>
+              {uploading ? "Analyzing Archives..." : "Import Documentation"}
+            </span>
+            <span style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, display: "block" }}>PDF, Word, or Text Files</span>
+          </div>
         </div>
       </div>
 
-      {/* Document list */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
-        <div style={{ padding: "6px 18px 8px", fontSize: 10, color: "var(--text-3)", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-          All Files ({documents.length})
+      {/* Dynamic List */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 10px" }}>
+        <div style={{ padding: "0 10px 10px", fontSize: 10, color: "var(--text-3)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          Repository Internal Files
         </div>
 
         {documents.length === 0 && (
-          <div style={{ padding: "28px 18px", textAlign: "center" }}>
-            <FileText size={28} strokeWidth={1} style={{ color: "var(--border)", margin: "0 auto 10px", display: "block" }} />
-            <div style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.6 }}>
-              No documents uploaded.<br />
-              <span style={{ fontStyle: "italic", fontSize: 11.5 }}>Upload a file to get started.</span>
+          <div style={{ padding: "40px 20px", textAlign: "center" }}>
+            <FileText size={32} strokeWidth={1} style={{ color: "var(--border)", margin: "0 auto 12px", opacity: 0.5 }} />
+            <div style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.5 }}>
+              Your library is empty.<br />
+              <span style={{ fontStyle: "italic", opacity: 0.8 }}>Upload files to start intelligence.</span>
             </div>
           </div>
         )}
 
-        {documents.map((doc) => {
-          const isActive = activeDocIds?.includes(doc.id);
-          const isReady = doc.status === "completed";
-          return (
-            <div key={doc.id}
-              onClick={() => isReady && toggleActiveDocId(doc.id)}
-              style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "9px 18px", cursor: isReady ? "pointer" : "default",
-                background: isActive ? "rgba(99,102,241,0.06)" : "transparent",
-                borderLeft: isActive ? "3px solid var(--accent)" : "3px solid transparent",
-                opacity: doc.status === "processing" ? 0.6 : 1,
-                transition: "all 0.15s",
-              }}>
-              {/* Checkbox */}
-              <div style={{
-                width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-                border: isActive ? "none" : "1.5px solid var(--border)",
-                background: isActive ? "var(--accent)" : "transparent",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "all 0.15s",
-              }}>
-                {isActive && <CheckCircle2 size={10} color="#fff" strokeWidth={2.5} />}
-              </div>
-
-              {/* Icon + name */}
-              <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 7 }}>
-                <FileText size={13} style={{ color: isActive ? "var(--accent)" : "var(--text-3)", flexShrink: 0 }} />
-                <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {documents.map((doc) => {
+            const isActive = activeDocIds?.includes(String(doc.id));
+            const isReady = doc.status === "completed";
+            const isProcessing = doc.status === "processing";
+            
+            return (
+              <div key={doc.id}
+                onClick={() => isReady && toggleActiveDocId(String(doc.id))}
+                style={{
+                  display: "flex", flexDirection: "column", gap: 2,
+                  padding: "10px 12px", borderRadius: 12,
+                  cursor: isReady ? "pointer" : "default",
+                  background: isActive ? "rgba(99,102,241,0.05)" : "transparent",
+                  border: isActive ? "1px solid rgba(99,102,241,0.1)" : "1px solid transparent",
+                  transition: "all 0.2s ease",
+                  position: "relative"
+                }}
+                className={isReady ? "hover-bg" : ""}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {/* Neural Checkbox */}
                   <div style={{
-                    fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    color: isActive ? "var(--text)" : "var(--text-2)",
-                    fontWeight: isActive ? 500 : 400,
-                  }}>{doc.filename}</div>
+                    width: 16, height: 16, borderRadius: 5, flexShrink: 0,
+                    border: isActive ? "none" : "1.5px solid var(--border)",
+                    background: isActive ? "var(--accent)" : "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "all 0.2s",
+                    boxShadow: isActive ? "0 2px 6px rgba(99,102,241,0.3)" : "none"
+                  }}>
+                    {isActive && <CheckCircle2 size={10} color="#fff" strokeWidth={3} />}
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      color: isProcessing ? "var(--text-3)" : "var(--text-2)",
+                      fontWeight: isActive ? 600 : 400,
+                    }}>{doc.filename}</div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {statusBadge(doc.status)}
+                    <button onClick={(e) => {
+                      e.stopPropagation();
+                      const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
+                      const url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/v1/documents/${doc.id}/file?token=${encodeURIComponent(token || "")}`;
+                      setPreviewDocUrl(url);
+                    }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 4, display: "flex" }}>
+                      <Eye size={13} />
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setDeletingDoc({ id: doc.id, name: doc.filename }); }} 
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 4, display: "flex" }}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
+                {isProcessing && <ProcessingBar />}
               </div>
-
-              {/* Status + actions */}
-              <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                {statusBadge(doc.status)}
-                <button onClick={(e) => {
-                  e.stopPropagation();
-                  const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
-                  const url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/v1/documents/${doc.id}/file?token=${encodeURIComponent(token || "")}`;
-                  setPreviewDocUrl(url);
-                }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 3, lineHeight: 0 }}>
-                  <Eye size={12} />
-                </button>
-                <button onClick={(e) => handleDelete(doc.id, e)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 3, lineHeight: 0 }}>
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Tip */}
-      <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)" }}>
-        <div style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic", lineHeight: 1.5, textAlign: "center" }}>
-          Select documents to use as context in your chat
+            );
+          })}
         </div>
       </div>
+
+      {/* Context Indicator */}
+      <div style={{ padding: "16px 20px", borderTop: "1px solid var(--border)", background: "rgba(0,0,0,0.01)" }}>
+        <div style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic", lineHeight: 1.5, textAlign: "center" }}>
+          Selected files are fused into neural<br />Retrieval-Augmented context.
+        </div>
+      </div>
+      <ConfirmModal
+        isOpen={!!deletingDoc}
+        onClose={() => setDeletingDoc(null)}
+        onConfirm={confirmDelete}
+        title="Are you sure you want to delete this file?"
+        message={`"${deletingDoc?.name}"`}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </aside>
   );
 }

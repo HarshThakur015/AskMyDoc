@@ -59,35 +59,47 @@ def process_and_ingest(file_path, filename, user_id, document_id):
         if not chunks:
             raise ValueError("Failed to create chunks from the text.")
 
-        # 3. Generate Embeddings (Cloud Batched)
-        print(f"Generating vectors for {len(chunks)} chunks via Google API...")
-        vectors = []
-        batch_size = 50  # Balanced for reliability
+        # 3. Generate Embeddings (Higher Parallelization)
+        print(f"Generating vectors for {len(chunks)} chunks via Google API (Turbo mode)...")
+        from concurrent.futures import ThreadPoolExecutor
         
-        for i in range(0, len(chunks), batch_size):
-            batch_chunks = chunks[i:i + batch_size]
+        batch_size = 100 
+        chunk_batches = [chunks[i:i + batch_size] for i in range(0, len(chunks), batch_size)]
+        
+        def process_batch(batch_idx, batch_chunks):
             embeddings = get_embeddings_batch(batch_chunks)
-            
+            batch_vectors = []
             for j, emb in enumerate(embeddings):
                 chunk_text = batch_chunks[j]
-                vector_id = f"{document_id}_chunk_{i+j}"
-                
-                # Metadata for retrieval
+                global_idx = (batch_idx * batch_size) + j
+                vector_id = f"{document_id}_chunk_{global_idx}"
                 metadata = {
                     "user_id": user_id,
                     "document_id": document_id,
                     "source": filename,
                     "text": chunk_text
                 }
-                vectors.append((vector_id, emb, metadata))
+                batch_vectors.append((vector_id, emb, metadata))
+            return batch_vectors
 
-        # 4. Upsert to Pinecone
+        all_vectors = []
+        # Increased workers from 5 to 15 for faster cloud API throughput
+        with ThreadPoolExecutor(max_workers=15) as executor:
+            batch_results = list(executor.map(lambda p: process_batch(*p), enumerate(chunk_batches)))
+            for result_list in batch_results:
+                all_vectors.extend(result_list)
+
+        # 4. Upsert to Pinecone (Higher Parallelization)
+        print(f"Upserting {len(all_vectors)} vectors to Pinecone...")
         pinecone_client = get_pinecone_client()
         index = pinecone_client.Index(COLLECTION_NAME)
         
         upsert_batch_size = 100
-        for i in range(0, len(vectors), upsert_batch_size):
-            index.upsert(vectors=vectors[i:i + upsert_batch_size])
+        upsert_batches = [all_vectors[i:i + upsert_batch_size] for i in range(0, len(all_vectors), upsert_batch_size)]
+        
+        # Increased workers from 5 to 10 for faster upserts
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            list(executor.map(lambda b: index.upsert(vectors=b, namespace=""), upsert_batches))
 
         # 5. Success! Update DB status to 'completed'
         _update_document_status(document_id, 'completed', user_id=user_id)

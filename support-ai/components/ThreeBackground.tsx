@@ -1,7 +1,11 @@
 "use client";
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 
+/**
+ * Neural Constellation Background
+ * A high-end particle network that represents "intelligence" and "connectivity".
+ */
 export default function ThreeBackground() {
   const mountRef = useRef<HTMLDivElement>(null);
 
@@ -10,115 +14,138 @@ export default function ThreeBackground() {
     const W = window.innerWidth, H = window.innerHeight;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(55, W / H, 0.1, 1000);
-    camera.position.z = 28;
+    const camera = new THREE.PerspectiveCamera(60, W / H, 0.1, 1000);
+    camera.position.z = 30;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(W, H);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(0x000000, 0);
+    renderer.setClearColor(0x0a0a0a, 0); // Transparent to show CSS gradients if any
     mountRef.current.appendChild(renderer.domElement);
 
-    // Soft floating lines — like ink strokes on paper
+    // Dynamic Particle System
+    const particleCount = 200;
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = new Float32Array(particleCount * 3);
+    
+    for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 80;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 60;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 40;
+
+        velocities[i * 3] = (Math.random() - 0.5) * 0.02;
+        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.PointsMaterial({
+        color: 0x94a3b8,
+        size: 0.25,
+        transparent: true,
+        opacity: 0.8,
+        sizeAttenuation: true
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+
+    // Line Network (Constellation)
     const lineMaterial = new THREE.LineBasicMaterial({
-      color: 0xb8b0a5,
-      transparent: true,
-      opacity: 0.18,
+        color: 0x94a3b8,
+        transparent: true,
+        opacity: 0.15
     });
 
-    const lineGroup = new THREE.Group();
-    for (let i = 0; i < 18; i++) {
-      const points = [];
-      const startX = (Math.random() - 0.5) * 90;
-      const startY = (Math.random() - 0.5) * 60;
-      const startZ = (Math.random() - 0.5) * 30;
-      for (let j = 0; j < 8; j++) {
-        points.push(new THREE.Vector3(
-          startX + (Math.random() - 0.5) * 14,
-          startY + (Math.random() - 0.5) * 14,
-          startZ + (Math.random() - 0.5) * 8,
-        ));
-      }
-      const geo = new THREE.BufferGeometry().setFromPoints(points);
-      lineGroup.add(new THREE.Line(geo, lineMaterial));
-    }
-    scene.add(lineGroup);
-
-    // Sparse dust particles — warm stone tone
-    const DOTS = 420;
-    const pos = new Float32Array(DOTS * 3);
-    for (let i = 0; i < DOTS; i++) {
-      pos[i * 3]     = (Math.random() - 0.5) * 110;
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 70;
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 50;
-    }
-    const pGeo = new THREE.BufferGeometry();
-    pGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    const pMat = new THREE.PointsMaterial({
-      color: 0xc4bdb5,
-      size: 0.28,
-      transparent: true,
-      opacity: 0.45,
-      sizeAttenuation: true,
-    });
-    scene.add(new THREE.Points(pGeo, pMat));
-
-    // Two large thin rings — editorial geometry
-    const makeRing = (r: number, tube: number, color: number, opacity: number) => {
-      const g = new THREE.TorusGeometry(r, tube, 16, 90);
-      const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
-      return new THREE.Mesh(g, m);
-    };
-
-    const ring1 = makeRing(9, 0.05, 0x8e8680, 0.18);
-    ring1.position.set(16, 4, -8);
-    ring1.rotation.x = 0.5;
-    scene.add(ring1);
-
-    const ring2 = makeRing(6, 0.04, 0xa89e95, 0.13);
-    ring2.position.set(-20, -5, -12);
-    ring2.rotation.y = 0.7;
-    scene.add(ring2);
+    let lineMesh: THREE.LineSegments | null = null;
 
     const mouse = { x: 0, y: 0 };
-    const onMouse = (e: MouseEvent) => {
-      mouse.x = (e.clientX / W - 0.5) * 0.25;
-      mouse.y = (e.clientY / H - 0.5) * 0.18;
+    const onMouseMove = (e: MouseEvent) => {
+        mouse.x = (e.clientX / W - 0.5) * 2;
+        mouse.y = (e.clientY / H - 0.5) * 2;
     };
-    window.addEventListener("mousemove", onMouse);
+    window.addEventListener("mousemove", onMouseMove);
 
     const onResize = () => {
-      const w = window.innerWidth, h = window.innerHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+        const w = window.innerWidth, h = window.innerHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
     };
     window.addEventListener("resize", onResize);
 
     let animId: number;
     const animate = () => {
-      animId = requestAnimationFrame(animate);
-      lineGroup.rotation.y += 0.00035;
-      lineGroup.rotation.x += 0.00015;
-      ring1.rotation.z += 0.0018;
-      ring2.rotation.z -= 0.0012;
-      camera.position.x += (mouse.x * 2.5 - camera.position.x) * 0.035;
-      camera.position.y += (-mouse.y * 1.8 - camera.position.y) * 0.035;
-      camera.lookAt(scene.position);
-      renderer.render(scene, camera);
+        animId = requestAnimationFrame(animate);
+
+        const currentPos = geometry.attributes.position.array as Float32Array;
+        
+        // Update particles
+        for (let i = 0; i < particleCount; i++) {
+            currentPos[i * 3] += velocities[i * 3];
+            currentPos[i * 3 + 1] += velocities[i * 3 + 1];
+            currentPos[i * 3 + 2] += velocities[i * 3 + 2];
+
+            // Boundary check
+            if (Math.abs(currentPos[i * 3]) > 45) velocities[i * 3] *= -1;
+            if (Math.abs(currentPos[i * 3 + 1]) > 35) velocities[i * 3 + 1] *= -1;
+            if (Math.abs(currentPos[i * 3 + 2]) > 25) velocities[i * 3 + 2] *= -1;
+        }
+        geometry.attributes.position.needsUpdate = true;
+
+        // Build lines based on distance
+        if (lineMesh) scene.remove(lineMesh);
+        
+        const linePositions: number[] = [];
+        const maxDist = 14;
+        
+        for (let i = 0; i < particleCount; i++) {
+            for (let j = i + 1; j < particleCount; j++) {
+                const dx = currentPos[i * 3] - currentPos[j * 3];
+                const dy = currentPos[i * 3 + 1] - currentPos[j * 3 + 1];
+                const dz = currentPos[i * 3 + 2] - currentPos[j * 3 + 2];
+                const distSq = dx * dx + dy * dy + dz * dz;
+
+                if (distSq < maxDist * maxDist) {
+                    linePositions.push(currentPos[i * 3], currentPos[i * 3 + 1], currentPos[i * 3 + 2]);
+                    linePositions.push(currentPos[j * 3], currentPos[j * 3 + 1], currentPos[j * 3 + 2]);
+                }
+            }
+        }
+
+        const lineGeo = new THREE.BufferGeometry();
+        lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(linePositions, 3));
+        lineMesh = new THREE.LineSegments(lineGeo, lineMaterial);
+        scene.add(lineMesh);
+
+        // Smooth camera movement
+        camera.position.x += (mouse.x * 5 - camera.position.x) * 0.05;
+        camera.position.y += (-mouse.y * 4 - camera.position.y) * 0.05;
+        camera.lookAt(scene.position);
+
+        renderer.render(scene, camera);
     };
     animate();
 
     return () => {
-      cancelAnimationFrame(animId);
-      window.removeEventListener("mousemove", onMouse);
-      window.removeEventListener("resize", onResize);
-      renderer.dispose();
-      if (mountRef.current) mountRef.current.innerHTML = "";
+        cancelAnimationFrame(animId);
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("resize", onResize);
+        renderer.dispose();
+        if (mountRef.current) mountRef.current.innerHTML = "";
     };
   }, []);
 
   return (
-    <div ref={mountRef} style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }} />
+    <div 
+        ref={mountRef} 
+        style={{ 
+            position: "fixed", inset: 0, zIndex: -1, 
+            pointerEvents: "none",
+            background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)" 
+        }} 
+    />
   );
 }
