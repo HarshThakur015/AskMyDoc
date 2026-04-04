@@ -45,7 +45,10 @@ def process_and_ingest(file_path, filename, user_id, document_id):
         # 1. Extract Text
         raw_text = extract_text(file_path, filename)
         if not raw_text.strip():
-            raise ValueError("Extracted text is empty. File might be scanned or corrupted.")
+            raise ValueError(
+                "No extractable text found. This is usually an image-only/scanned PDF. "
+                "Please upload a text-searchable PDF, DOCX, or TXT file."
+            )
 
         # 2. Chunking
         print("Chunking document...")

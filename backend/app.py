@@ -140,6 +140,19 @@ def chat_run():
         document_ids = data['document_ids']
     elif 'document_id' in data and data['document_id']:
         document_ids = [data['document_id']]
+
+    # Normalize document IDs so numeric strings from frontend match numeric metadata in vector store.
+    normalized_document_ids = []
+    for doc_id in document_ids:
+        if doc_id is None or doc_id == "":
+            continue
+        if isinstance(doc_id, str) and doc_id.isdigit():
+            normalized_document_ids.append(int(doc_id))
+        elif isinstance(doc_id, (int, float)):
+            normalized_document_ids.append(int(doc_id))
+        else:
+            normalized_document_ids.append(doc_id)
+    document_ids = normalized_document_ids
     
     start_time = time.time()
     
@@ -197,7 +210,6 @@ def chat_run():
                 msg_count = cur.fetchone()[0]
                 if msg_count == 1:
                     try:
-                        from llm_handler import generate_response
                         title_prompt = f"Summarize this query into a meaningful 3-5 word title for a chat session. Do not use quotes or punctuation. Query: {question}"
                         title_res = generate_response(title_prompt, [], [])
                         new_title = title_res["answer"].replace('"', '').strip()
@@ -360,6 +372,8 @@ def upload_file():
                 errors.append(f"{file.filename}: unsupported file type")
                 continue
 
+            conn = None
+            file_path = None
             try:
                 # 1. First insert into DB to get the ID
                 filename = secure_filename(file.filename)
@@ -373,6 +387,7 @@ def upload_file():
                 conn.commit()
                 cur.close()
                 release_db_connection(conn)
+                conn = None
 
                 # 2. Save file with document_id as prefix for easy retrieval later
                 unique_filename = f"{document_id}_{filename}"
@@ -387,9 +402,22 @@ def upload_file():
                 queued.append({"filename": filename, "document_id": document_id})
 
             except Exception as file_err:
-                if os.path.exists(file_path):
+                # Roll back current transaction when DB operation fails.
+                if conn is not None:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+
+                if file_path and os.path.exists(file_path):
                     os.remove(file_path)
                 errors.append(f"{file.filename}: {str(file_err)}")
+            finally:
+                if conn is not None:
+                    try:
+                        release_db_connection(conn)
+                    except Exception:
+                        pass
 
         if not queued:
             return jsonify({"error": "No valid files were uploaded.", "details": errors}), 400

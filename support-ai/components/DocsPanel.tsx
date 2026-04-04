@@ -61,9 +61,21 @@ export default function DocsPanel() {
   const handleUpload = async (file: File) => {
     setUploading(true);
     try {
+      console.log(`Initiating stream of document "${file.name}" to neural buffer...`);
       await uploadDocument(file);
+      console.log("Upload accepted. Document is now being processed in the background.");
       await fetchDocs();
-    } catch {}
+    } catch (e: any) {
+      console.error("Neural Stream Interrupted:", e);
+      const status = e.response?.status;
+      const errorMsg = e.response?.data?.error || e.message || "Unknown error";
+      
+      if (status === 401) {
+        alert("Session Expired: Re-authentication required. Please Logout and Login again.");
+      } else {
+        alert(`Upload Protocol Error [${status}]: ${errorMsg}`);
+      }
+    }
     setUploading(false);
   };
 
@@ -91,6 +103,7 @@ export default function DocsPanel() {
   };
 
   const selectedCount = documents.filter((d) => activeDocIds?.includes(String(d.id))).length;
+  const failedCount = documents.filter((d) => d.status === "failed").length;
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -130,7 +143,7 @@ export default function DocsPanel() {
         </div>
 
         {/* Upload Dropzone */}
-        <input ref={fileRef} type="file" accept=".pdf,.docx,.txt" style={{ display: "none" }} onChange={onFileChange} />
+        <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.txt" style={{ display: "none" }} onChange={onFileChange} />
         <div
           onClick={() => fileRef.current?.click()}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -160,7 +173,7 @@ export default function DocsPanel() {
             <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", display: "block" }}>
               {uploading ? "Analyzing Archives..." : "Import Documentation"}
             </span>
-            <span style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, display: "block" }}>PDF, Word, or Text Files</span>
+            <span style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, display: "block" }}>PDF, DOC/DOCX, or TXT Files</span>
           </div>
         </div>
       </div>
@@ -170,6 +183,21 @@ export default function DocsPanel() {
         <div style={{ padding: "0 10px 10px", fontSize: 10, color: "var(--text-3)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>
           Repository Internal Files
         </div>
+
+        {failedCount > 0 && (
+          <div style={{
+            margin: "0 10px 10px",
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid rgba(239, 68, 68, 0.2)",
+            background: "rgba(239, 68, 68, 0.06)",
+            color: "var(--danger)",
+            fontSize: 11,
+            lineHeight: 1.4,
+          }}>
+            {failedCount} document{failedCount > 1 ? "s" : ""} failed processing. Open the file row to see the exact reason.
+          </div>
+        )}
 
         {documents.length === 0 && (
           <div style={{ padding: "40px 20px", textAlign: "center" }}>
@@ -186,6 +214,8 @@ export default function DocsPanel() {
             const isActive = activeDocIds?.includes(String(doc.id));
             const isReady = doc.status === "completed";
             const isProcessing = doc.status === "processing";
+            const isFailed = doc.status === "failed";
+            const failureReason = (doc as any).error_message as string | undefined;
             
             return (
               <div key={doc.id}
@@ -217,7 +247,7 @@ export default function DocsPanel() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
                       fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      color: isProcessing ? "var(--text-3)" : "var(--text-2)",
+                      color: isProcessing ? "var(--text-3)" : isFailed ? "var(--danger)" : "var(--text-2)",
                       fontWeight: isActive ? 600 : 400,
                     }}>{doc.filename}</div>
                   </div>
@@ -239,6 +269,19 @@ export default function DocsPanel() {
                   </div>
                 </div>
                 {isProcessing && <ProcessingBar />}
+                {isFailed && failureReason && (
+                  <div style={{
+                    marginTop: 4,
+                    marginLeft: 26,
+                    fontSize: 11,
+                    color: "var(--danger)",
+                    lineHeight: 1.4,
+                    whiteSpace: "normal",
+                    wordBreak: "break-word",
+                  }}>
+                    {failureReason}
+                  </div>
+                )}
               </div>
             );
           })}

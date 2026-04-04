@@ -14,8 +14,8 @@ load_dotenv()
 # --- Configuration ---
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-COLLECTION_NAME = "user-documents"
-EMBEDDING_MODEL_NAME = "models/text-embedding-004"
+COLLECTION_NAME = "user-documents-v3"
+EMBEDDING_MODEL_NAME = "models/gemini-embedding-2-preview"
 
 # Configure Google Generative AI
 if GOOGLE_API_KEY:
@@ -63,7 +63,7 @@ def circuit_breaker(name, failure_threshold=3, recovery_timeout=60):
 def get_embedding(text):
     """Generates an embedding for the given text using Google's API."""
     if not text.strip():
-        return [0.0] * 768  # Return zero vector for empty text
+        return [0.0] * 3072  # Return zero vector for empty text
         
     try:
         response = genai.embed_content(
@@ -88,7 +88,14 @@ def get_embeddings_batch(texts):
             content=texts,
             task_type="retrieval_document"
         )
-        return response['embeddings']
+        # Handle cases where the SDK might return 'embedding' or 'embeddings' 
+        # based on model/version, ensuring we always return a list of vectors.
+        if 'embedding' in response:
+            return response['embedding']
+        elif 'embeddings' in response:
+            return response['embeddings']
+        else:
+            raise KeyError(f"Unexpected response format from Google API: {response.keys() if hasattr(response, 'keys') else 'No keys'}")
     except Exception as e:
         print(f"Error generating batch embeddings with Google API: {str(e)}")
         raise
@@ -108,7 +115,7 @@ def get_pinecone_client():
                 print(f"Index {COLLECTION_NAME} missing! Creating new Serverless index...")
                 client.create_index(
                     name=COLLECTION_NAME,
-                    dimension=768,  # Match Google text-embedding-004 output
+                    dimension=3072,  # Match Google gemini-embedding-2-preview output
                     metric="cosine",
                     spec=ServerlessSpec(
                         cloud="aws",

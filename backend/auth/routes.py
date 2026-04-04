@@ -102,10 +102,31 @@ def token_required(f):
 
         try:
             data = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-            request.user = data  # Save user info
+
+            # Ensure token user still exists in DB (handles stale tokens after DB resets/deletions).
+            conn = get_db_connection()
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT id, username, email FROM users WHERE id = %s", (data.get("id"),))
+                user_row = cur.fetchone()
+                cur.close()
+            finally:
+                release_db_connection(conn)
+
+            if not user_row:
+                return jsonify({"error": "User session is no longer valid. Please login again."}), 401
+
+            request.user = {
+                "id": user_row[0],
+                "username": user_row[1],
+                "email": user_row[2],
+                "exp": data.get("exp")
+            }
         except jwt.ExpiredSignatureError:
+            print(f"DEBUG: Token expired for user requesting {request.path}")
             return jsonify({"error": "Token expired!"}), 401
         except jwt.InvalidTokenError:
+            print(f"DEBUG: Invalid token presented for {request.path}")
             return jsonify({"error": "Invalid token!"}), 401
 
         return f(*args, **kwargs)
