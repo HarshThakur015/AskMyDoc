@@ -121,7 +121,7 @@ export default function ChatWindow() {
       const res = await sendMessage(activeDocIds, q, history, sessionId ?? undefined);
       addMessage({ role: "assistant", content: res.data.answer || "No response received.", timestamp: new Date() });
     } catch (e: any) {
-      setError(e.response?.data?.error || "Neural link failure. Connection interrupted.");
+      setError(e.response?.data?.error || "Could not get a response. Please try again.");
     } finally {
       setStreaming(false);
     }
@@ -186,10 +186,10 @@ export default function ChatWindow() {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em" }}>
-            {currentSessionId ? (activeDocs.length === 1 ? activeDocs[0]?.filename : `${activeDocs.length || "No"} Source Nodes`) : "Intelligence Interface"}
+            {currentSessionId ? (activeDocs.length === 1 ? activeDocs[0]?.filename : `${activeDocs.length || "No"} Documents`) : "Chat"}
           </div>
           <div style={{ fontSize: 11.5, color: "var(--text-3)", fontWeight: 500 }}>
-            {currentSessionId ? `${messages.length} Neural Exchanges` : "Awaiting document selection"}
+            {currentSessionId ? `${messages.length} messages` : "Select documents to begin"}
           </div>
         </div>
         {activeDocs.length > 0 && (
@@ -219,8 +219,8 @@ export default function ChatWindow() {
               </h2>
               <p style={{ color: "var(--text-3)", fontSize: 15, maxWidth: 460, lineHeight: 1.8, fontStyle: "italic" }}>
                 {activeDocIds.length > 0
-                  ? "Select a specialized query below to analyze your data repository."
-                  : "Bridge the gap with your archives. Select source nodes to initialize the neural link."}
+                  ? "Use a suggested prompt below or ask your own question."
+                  : "Select one or more documents to start chatting."}
               </p>
             </div>
             {activeDocIds.length > 0 && (
@@ -283,7 +283,7 @@ export default function ChatWindow() {
         }}>
           <textarea ref={textareaRef} rows={1} value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown} disabled={isStreaming}
-            placeholder={activeDocIds.length > 0 ? "Ask anything about your archives…" : "Select source nodes to continue →"}
+            placeholder={activeDocIds.length > 0 ? "Ask anything about your documents..." : "Select documents to continue ->"}
             style={{ flex: 1, resize: "none", background: "transparent", border: "none", outline: "none", color: "var(--text)", fontSize: 15, fontFamily: "'Source Serif 4', serif", lineHeight: 1.7, paddingTop: 4 }} />
           <button onClick={() => submit()} disabled={!input.trim() || isStreaming || activeDocIds.length === 0}
             style={{
@@ -297,7 +297,7 @@ export default function ChatWindow() {
           </button>
         </div>
         <p style={{ fontSize: 11, color: "var(--text-3)", marginTop: 10, textAlign: "center", fontStyle: "italic", opacity: 0.8 }}>
-          Grounded Synthesis · Active Neural Retrieval
+          Grounded answers · Document-aware retrieval
         </p>
       </div>
     </div>

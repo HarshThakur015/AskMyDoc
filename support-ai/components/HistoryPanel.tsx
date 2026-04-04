@@ -26,16 +26,26 @@ export default function HistoryPanel() {
 
   const confirmDeleteSession = async () => {
     if (!deletingSession) return;
+    const targetSession = deletingSession;
+    const targetId = String(targetSession.id);
+    const prevSessions = useStore.getState().sessions;
+
+    // Close modal and update UI first for snappy feedback.
+    setDeletingSession(null);
+    setSessions(prevSessions.filter((s) => String(s.id) !== targetId));
+
     try {
-      await deleteSession(deletingSession.id);
-      if (String(currentSessionId) === String(deletingSession.id)) {
+      await deleteSession(targetSession.id);
+      if (String(currentSessionId) === targetId) {
         setCurrentSessionId(null);
         setMessages([]);
         setActiveDocIds([]);
       }
-      await fetchSessions();
+      fetchSessions();
     } catch (e) {
       console.error("Failed to delete session", e);
+      // Recover sessions from server state if delete fails.
+      fetchSessions();
     }
   };
 
@@ -82,7 +92,7 @@ export default function HistoryPanel() {
           </div>
           <div>
             <div style={{ fontFamily: "'Playfair Display', serif", fontWeight: 700, fontSize: 17, color: "var(--text)", letterSpacing: "-0.01em" }}>AskMyDoc</div>
-            <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, opacity: 0.8 }}>Neural Archive</div>
+            <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, opacity: 0.8 }}>Document Workspace</div>
           </div>
         </div>
       </div>
@@ -96,7 +106,7 @@ export default function HistoryPanel() {
           boxShadow: "0 4px 12px rgba(99,102,241,0.2)",
           transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
         }} className="hover-lift">
-          <Plus size={16} strokeWidth={2.5} /> Initialize Workspace
+          <Plus size={16} strokeWidth={2.5} /> New Chat
         </button>
       </div>
 
@@ -114,7 +124,7 @@ export default function HistoryPanel() {
 
           {olderSessions.length > 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ marginTop: 16 }}>
-              <div style={{ padding: "10px 14px 8px", fontSize: 10.5, color: "var(--text-3)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.6 }}>Historical Traces</div>
+              <div style={{ padding: "10px 14px 8px", fontSize: 10.5, color: "var(--text-3)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.6 }}>Older Chats</div>
               {olderSessions.map((s) => (
                 <SessionItem key={s.id} session={s} isActive={String(currentSessionId) === String(s.id)} onClick={() => switchSession(s.id)} onDelete={() => setDeletingSession({ id: s.id, title: s.title })} />
               ))}
@@ -126,8 +136,8 @@ export default function HistoryPanel() {
           <div style={{ padding: "60px 20px", textAlign: "center" }}>
             <Sparkles size={32} strokeWidth={1} style={{ color: "var(--border)", margin: "0 auto 14px", display: "block", opacity: 0.4 }} />
             <div style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.6 }}>
-              No neural exchanges found.<br />
-              <span style={{ fontStyle: "italic", opacity: 0.7 }}>Launch a workspace to begin.</span>
+              No chats yet.<br />
+              <span style={{ fontStyle: "italic", opacity: 0.7 }}>Start a new chat to begin.</span>
             </div>
           </div>
         )}
@@ -146,7 +156,7 @@ export default function HistoryPanel() {
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{user?.email}</div>
             <div style={{ fontSize: 10.5, color: "var(--text-3)", display: "flex", alignItems: "center", gap: 4 }}>
-              <div style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--success)" }} /> Linked Operator
+              <div style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--success)" }} /> Signed in
             </div>
           </div>
           <button onClick={logout} style={{

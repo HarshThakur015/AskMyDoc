@@ -32,7 +32,7 @@ function ProcessingBar() {
 export default function DocsPanel() {
   const {
     documents, activeDocIds,
-    setDocuments, toggleActiveDocId, setPreviewDocUrl,
+    setDocuments, toggleActiveDocId, setPreviewDocUrl, setActiveDocIds,
   } = useStore();
   const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,12 +61,12 @@ export default function DocsPanel() {
   const handleUpload = async (file: File) => {
     setUploading(true);
     try {
-      console.log(`Initiating stream of document "${file.name}" to neural buffer...`);
+      console.log(`Starting upload for "${file.name}"...`);
       await uploadDocument(file);
       console.log("Upload accepted. Document is now being processed in the background.");
       await fetchDocs();
     } catch (e: any) {
-      console.error("Neural Stream Interrupted:", e);
+      console.error("Upload failed:", e);
       const status = e.response?.status;
       const errorMsg = e.response?.data?.error || e.message || "Unknown error";
       
@@ -87,13 +87,24 @@ export default function DocsPanel() {
 
   const confirmDelete = async () => {
     if (!deletingDoc) return;
+    const targetDoc = deletingDoc;
+    const targetId = String(targetDoc.id);
+    const prevDocs = useStore.getState().documents;
+    const prevActiveIds = useStore.getState().activeDocIds;
+
+    // Close modal and update UI first for faster perceived deletion.
+    setDeletingDoc(null);
+    setDocuments(prevDocs.filter((d: any) => String(d.id) !== targetId));
+    setActiveDocIds(prevActiveIds.filter((id) => id !== targetId));
+
     try {
-      await deleteDocument(deletingDoc.id);
-      await fetchDocs();
+      await deleteDocument(targetDoc.id);
+      fetchDocs(true);
     } catch (e) {
       console.error("Delete failed", e);
+      // If backend delete fails, restore from server state.
+      fetchDocs(true);
     }
-    setDeletingDoc(null);
   };
 
   const statusBadge = (s: string) => {
@@ -171,7 +182,7 @@ export default function DocsPanel() {
           </div>
           <div style={{ textAlign: "center" }}>
             <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", display: "block" }}>
-              {uploading ? "Analyzing Archives..." : "Import Documentation"}
+              {uploading ? "Processing file..." : "Upload Document"}
             </span>
             <span style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, display: "block" }}>PDF, DOC/DOCX, or TXT Files</span>
           </div>
@@ -204,7 +215,7 @@ export default function DocsPanel() {
             <FileText size={32} strokeWidth={1} style={{ color: "var(--border)", margin: "0 auto 12px", opacity: 0.5 }} />
             <div style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.5 }}>
               Your library is empty.<br />
-              <span style={{ fontStyle: "italic", opacity: 0.8 }}>Upload files to start intelligence.</span>
+              <span style={{ fontStyle: "italic", opacity: 0.8 }}>Upload files to start chatting.</span>
             </div>
           </div>
         )}
@@ -291,7 +302,7 @@ export default function DocsPanel() {
       {/* Context Indicator */}
       <div style={{ padding: "16px 20px", borderTop: "1px solid var(--border)", background: "rgba(0,0,0,0.01)" }}>
         <div style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic", lineHeight: 1.5, textAlign: "center" }}>
-          Selected files are fused into neural<br />Retrieval-Augmented context.
+          Selected files are used as context<br />for your answers.
         </div>
       </div>
       <ConfirmModal
