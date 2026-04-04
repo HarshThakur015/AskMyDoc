@@ -54,30 +54,23 @@ app.logger.disabled = True
 app.logger.propagate = False
 flask.cli.show_server_banner = lambda *args, **kwargs: None
 
-# Enable CORS for all routes with explicit configuration
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True, allow_headers=["Content-Type", "Authorization"], methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+# Enable CORS with origins from .env or default to localhost
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+CORS(app, resources={r"/*": {
+    "origins": [frontend_url, "http://localhost:3000"]
+}}, supports_credentials=True, allow_headers=["Content-Type", "Authorization"], methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # Register authentication blueprint
 app.register_blueprint(auth, url_prefix='/auth')
 
-# Pre-warm AI models in the MAIN THREAD at startup.
-# On Windows, PyTorch cannot initialize from a background thread.
-# Loading here caches them globally so background ingestion threads
-# simply reuse the already-loaded model without triggering PyTorch init.
+# Pre-warm is no longer needed because we use Google Cloud API (no heavy local models to load)
 def _prewarm_models():
     try:
-        print("Pre-warming BAAI embedding model (main thread)...")
-        from retrieval import get_embedding_model, get_pinecone_client, get_cross_encoder
-        get_embedding_model()
+        from retrieval import get_pinecone_client
         get_pinecone_client()
-        print("Pre-warming Cross-Encoder model (main thread)...")
-        get_cross_encoder()
-        print("Pre-warming fast MiniLM semantic chunker (main thread)...")
-        from ingestion import get_fast_embedder
-        get_fast_embedder()
-        print("All models ready [OK]")
+        print("Pinecone client initialized [OK]")
     except Exception as e:
-        print(f"Warning: Model pre-warm failed: {e}")
+        print(f"Warning: Pre-warm failed: {e}")
 
 _prewarm_models()
 
@@ -465,7 +458,14 @@ def delete_document(doc_id):
         if os.path.exists(file_path):
             os.remove(file_path)
         
-        # Note: Ideally we should also delete from Pinecone here, but for now we just remove the DB entry
+        # Delete from Pinecone
+        try:
+            from retrieval import get_pinecone_client, COLLECTION_NAME
+            index = get_pinecone_client().Index(COLLECTION_NAME)
+            index.delete(filter={"document_id": doc_id, "user_id": user_id})
+        except Exception as pe:
+            print(f"Warning: Failed to delete vectors from Pinecone: {pe}")
+
         return jsonify({"message": "Document deleted"}), 200
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
