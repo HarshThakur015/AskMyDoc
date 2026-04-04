@@ -13,7 +13,7 @@ load_dotenv()
 
 # --- Configuration ---
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 COLLECTION_NAME = "user-documents"
 EMBEDDING_MODEL_NAME = "models/text-embedding-004"
 

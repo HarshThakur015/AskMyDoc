@@ -32,6 +32,11 @@ except ImportError as e:
 
 load_dotenv()
 
+# --- Configuration ---
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+COLLECTION_NAME = "user-documents"
+
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
 
@@ -515,53 +520,8 @@ def serve_document_file(doc_id):
         release_db_connection(conn)
 
 
-# Start a background thread to preload models
-def preload_models():
-    try:
-        from retrieval import get_embedding_model, get_cross_encoder, get_pinecone_client
-        # Import llm_handler conditionally as it might not be needed immediately
-        try:
-            from llm_handler import ensure_genai_initialized
-        except ImportError:
-            ensure_genai_initialized = None
-        
-        # Load models in background with proper error handling
-        try:
-            get_embedding_model()
-        except Exception as e:
-            pass
-            
-        try:
-            get_cross_encoder()
-        except Exception as e:
-            pass
-            
-        try:
-            get_pinecone_client()
-        except Exception as e:
-            pass
-            
-        # Only try to load Gemini if available
-        if ensure_genai_initialized:
-            try:
-                ensure_genai_initialized()
-            except Exception as e:
-                pass
-    except Exception as e:
-        pass
-
-# Start preloading after app is created but before it runs
-threading.Thread(target=preload_models, daemon=True).start()
-
+# Start server logic
 if __name__ == "__main__":
     init_db() # Run DB initialization on startup
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
-    # Test DB connection before starting server
-    # conn = get_db_connection()
-    # cur = conn.cursor()
-    # cur.execute("SELECT version();")
-    # print(cur.fetchone())
-    # cur.close()
-    # conn.close()
