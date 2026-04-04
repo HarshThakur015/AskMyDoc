@@ -1,0 +1,3 @@
+ENGINEERING CODING STANDARDS
+
+All backend Python code must strictly adhere to PEP 8 standards. We enforce this via Black formatting and Flake8 linting in our CI/CD pipeline. No pull request will be merged unless the test coverage remains above 85%. For database migrations, developers must use Alembic and never modify the database schema directly. Never use raw SQL queries unless absolutely necessary for performance reasons, and even then, parameterization must be used to prevent SQL injection. All API endpoints must be documented using OpenAPI (Swagger) specifications. Code reviews require at least two approvals before merging to the main branch. All new services must include structured logging using the company logging library.

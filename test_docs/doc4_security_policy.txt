@@ -1,0 +1,3 @@
+SECURITY PROTOCOLS AND INCIDENT RESPONSE
+
+In the event of a suspected data breach or security incident, employees must immediately disconnect their device from the network but must not power it off. Contact the IT Security Team immediately at extension 999 or via the Emergency Slack channel. Passwords must be rotated every 90 days and must be at least 14 characters long, containing a mix of uppercase, lowercase, numbers, and special symbols. Multi-factor authentication (MFA) is strictly mandatory for accessing any company repository or database. Employees must never share credentials with colleagues under any circumstances. Phishing emails must be reported immediately to security@company.com. All laptops must have full disk encryption enabled at all times.
