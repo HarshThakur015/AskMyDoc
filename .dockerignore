@@ -1,0 +1,38 @@
+# Ignore backend folders
+backend/__pycache__
+backend/temp_uploads
+
+# Ignore frontend folders (NOT used by backend build)
+support-ai/node_modules
+support-ai/.next
+support-ai/out
+
+# Ignore dev/test artifacts
+*.log
+test_docs/
+chat_cli.py
+list_models.py
+test_master_e2e.py
+models.txt
+models_list.txt
+all_models.log
+all_names.log
+
+# Ignore local configs
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+venv/
+.venv/
+.Python
+__pycache__
+*.py[cod]
+
+# OS
+.DS_Store
+Thumbs.db
